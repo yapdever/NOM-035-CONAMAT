@@ -1,3 +1,5 @@
+from tkinter import Tk, Label, Button, filedialog, messagebox, StringVar, Frame
+from openpyxl import Workbook
 import pandas as pd
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import PatternFill, Border, Side, Alignment, Font
@@ -6,6 +8,8 @@ import os
 from datetime import datetime
 import tkinter as tk
 from tkinter import filedialog
+from tkinter import Tk, Label, Button, filedialog, messagebox, StringVar, Frame
+
 
 # Diccionario de mapeo de respuestas a puntuaciones según tipo de pregunta
 puntuaciones = {
@@ -390,5 +394,83 @@ def main():
         print(f"Error al procesar los datos: {str(e)}")
 
 
+class App:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Evaluador de Riesgos Psicosociales")
+        self.root.geometry("500x300")
+        self.archivo_excel = None
+        self.carpeta_destino = None
+
+        # Etiquetas y botones
+        Label(root, text="Evaluador de Riesgos Psicosociales",
+              font=("Arial", 16, "bold")).pack(pady=10)
+        self.label_archivo = Label(root, text="Archivo Excel: No seleccionado")
+        self.label_archivo.pack(pady=5)
+        Button(root, text="Seleccionar archivo Excel",
+               command=self.seleccionar_archivo).pack(pady=5)
+
+        self.label_carpeta = Label(
+            root, text="Carpeta de destino: No seleccionada")
+        self.label_carpeta.pack(pady=5)
+        Button(root, text="Seleccionar carpeta de destino",
+               command=self.seleccionar_carpeta).pack(pady=5)
+
+        Button(root, text="Procesar y generar reportes",
+               command=self.procesar, bg="#4F81BD", fg="white").pack(pady=20)
+
+    def seleccionar_archivo(self):
+        archivo = filedialog.askopenfilename(
+            title="Selecciona el archivo Excel a evaluar",
+            filetypes=[("Archivos Excel", "*.xlsx *.xls")]
+        )
+        if archivo:
+            self.archivo_excel = archivo
+            self.label_archivo.config(
+                text=f"Archivo Excel: {os.path.basename(archivo)}")
+
+    def seleccionar_carpeta(self):
+        carpeta = filedialog.askdirectory(
+            title="Selecciona la carpeta de destino")
+        if carpeta:
+            self.carpeta_destino = carpeta
+            self.label_carpeta.config(text=f"Carpeta de destino: {carpeta}")
+
+    def procesar(self):
+        if not self.archivo_excel or not self.carpeta_destino:
+            messagebox.showerror(
+                "Error", "Debes seleccionar el archivo y la carpeta de destino.")
+            return
+        try:
+            df = pd.read_excel(self.archivo_excel,
+                               sheet_name='Respuestas de formulario 1')
+            df.columns = [col.split('.')[0] if '.' in str(
+                col) else col for col in df.columns]
+            resultados, detalles_preguntas = calcular_puntuaciones(df)
+
+            archivo_general = os.path.join(
+                self.carpeta_destino, 'resultados_evaluacion_psicosocial.xlsx')
+            resultados.to_excel(archivo_general, index=False)
+
+            carpeta_individuales = os.path.join(
+                self.carpeta_destino, "resultados_individuales")
+            os.makedirs(carpeta_individuales, exist_ok=True)
+
+            for idx, row in resultados.iterrows():
+                nombre = row['Nombre']
+                detalles = detalles_preguntas.iloc[idx]
+                wb = crear_reporte_individual(
+                    row, detalles, area_adscrita="Área por definir")
+                archivo_individual = os.path.join(
+                    carpeta_individuales, f"Reporte_{nombre.replace(' ', '_')}.xlsx")
+                wb.save(archivo_individual)
+
+            messagebox.showinfo("Éxito", "¡Reportes generados correctamente!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Ocurrió un error: {str(e)}")
+
+
 if __name__ == "__main__":
-    main()
+    root = Tk()
+    app = App(root)
+    root.mainloop()
