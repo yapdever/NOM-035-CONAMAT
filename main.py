@@ -1,4 +1,4 @@
-from tkinter import Tk, Label, Button, filedialog, messagebox, StringVar, Frame
+from tkinter import Tk, Label, Button, filedialog, messagebox, StringVar, Frame, Text, Scrollbar, RIGHT, Y, END
 from openpyxl import Workbook
 import pandas as pd
 from openpyxl import load_workbook, Workbook
@@ -10,7 +10,6 @@ import tkinter as tk
 from tkinter import filedialog
 from tkinter import Tk, Label, Button, filedialog, messagebox, StringVar, Frame
 
-
 # Diccionario de mapeo de respuestas a puntuaciones según tipo de pregunta
 puntuaciones = {
     'negativas': {
@@ -19,7 +18,7 @@ puntuaciones = {
         'Algunas veces': 2,
         'Casi nunca': 1,
         'Nunca': 0,
-        'Casi nuca': 1
+        'Casi nuca': 1  # Posible error de dedo, pero se mantiene por si aparece en los datos
     },
     'positivas': {
         'Siempre': 0,
@@ -30,7 +29,7 @@ puntuaciones = {
     }
 }
 
-# Categorías según el PDF
+# Diccionario de categorías y subcategorías según el cuestionario
 categorias = {
     'Ambiente de trabajo': [1, 2, 3],
     'Factores propios de la actividad': {
@@ -53,6 +52,9 @@ categorias = {
 
 
 def determinar_nivel_riesgo(puntuacion):
+    """
+    Determina el nivel de riesgo psicosocial según la puntuación total.
+    """
     if puntuacion < 20:
         return "Nulo o despreciable"
     elif 20 <= puntuacion < 45:
@@ -66,6 +68,10 @@ def determinar_nivel_riesgo(puntuacion):
 
 
 def calcular_puntuaciones(df):
+    """
+    Calcula las puntuaciones totales y por categoría para cada trabajador.
+    Devuelve dos DataFrames: uno con los resultados generales y otro con los detalles por pregunta.
+    """
     resultados = []
     detalles_por_pregunta = []
 
@@ -74,6 +80,7 @@ def calcular_puntuaciones(df):
         detalles = {'Nombre': row['Nombre Completo del trabajador']}
         detalles_preguntas = {'Nombre': row['Nombre Completo del trabajador']}
 
+        # Recorre todas las preguntas (1 a 46)
         for i in range(1, 47):
             col_name = f"{i}" if i < 0 else f"{i}"
             if col_name in row.index:
@@ -91,6 +98,7 @@ def calcular_puntuaciones(df):
 
         nivel_riesgo = determinar_nivel_riesgo(puntuacion_total)
 
+        # Calcular puntuaciones por categoría y subcategoría
         categorias_puntuacion = {}
         cat = 'Ambiente de trabajo'
         preguntas = categorias[cat]
@@ -118,6 +126,9 @@ def calcular_puntuaciones(df):
 
 
 def generar_recomendaciones(nivel):
+    """
+    Devuelve una recomendación según el nivel de riesgo.
+    """
     recomendaciones = {
         "Nulo o despreciable": "El riesgo resulta despreciable por lo que no se requiere medidas adicionales.",
         "Bajo": "Es necesario una mayor difusión de la política de prevención de riesgos psicosociales y programas para: la prevención de los factores de riesgo psicosocial, la promoción de un entorno organizacional favorable y la prevención de la violencia laboral.",
@@ -129,12 +140,15 @@ def generar_recomendaciones(nivel):
 
 
 def crear_reporte_individual(row, detalles_preguntas, area_adscrita):
+    """
+    Crea un archivo Excel con el reporte individual de un trabajador.
+    """
     # Crear un nuevo libro de Excel
     wb = Workbook()
     ws = wb.active
     ws.title = "Reporte Individual"
 
-    # Estilos
+    # Estilos para el formato del reporte
     bold_font = Font(bold=True)
     center_alignment = Alignment(
         horizontal='center', vertical='center', wrap_text=True)
@@ -153,7 +167,7 @@ def crear_reporte_individual(row, detalles_preguntas, area_adscrita):
         "Muy alto": "F4CCCC"
     }.get(row['Nivel de Riesgo'], "FFFFFF")
 
-    # Encabezado
+    # Encabezado del reporte
     mes_actual = datetime.now().strftime("%B %Y").upper()
     ws.merge_cells('A1:G1')
     ws['A1'] = f"RESULTADOS DE EVALUACIÓN DE RIESGOS PSICOSOCIALES ({mes_actual})"
@@ -169,7 +183,7 @@ def crear_reporte_individual(row, detalles_preguntas, area_adscrita):
     ws['B5'].fill = PatternFill(
         start_color=color_nivel, end_color=color_nivel, fill_type="solid")
 
-    # Encabezado de la tabla
+    # Encabezado de la tabla de resultados
     encabezados = [
         "Categoría", "Dominio", "Dimensión",
         "Puntuación de dimensión",
@@ -185,13 +199,12 @@ def crear_reporte_individual(row, detalles_preguntas, area_adscrita):
         cell.alignment = center_alignment
         cell.border = border
 
-    # Mapeo de preguntas a dimensiones
+    # Mapeo de preguntas a dimensiones (para mostrar resultados por dimensión)
     mapeo_dimensiones = {
         # Ambiente de trabajo
         "Condiciones peligrosas e inseguras": [1],
         "Condiciones deficientes e insalubres": [2],
         "Trabajos peligrosos": [3],
-
         # Factores propios de la actividad - Carga de trabajo
         "Cargas cuantitativas": [4, 5],
         "Ritmos de trabajo acelerado": [6],
@@ -199,32 +212,26 @@ def crear_reporte_individual(row, detalles_preguntas, area_adscrita):
         "Cargas psicológicas emocionales": [41, 42, 43],
         "Cargas de alta responsabilidad": [10, 11],
         "Cargas contradictorias o inconsistentes": [12, 13],
-
         # Factores propios de la actividad - Falta de control
         "Falta de control y autonomía sobre el trabajo": [20, 21, 22],
         "Limitada o nula posibilidad de desarrollo": [18, 19],
         "Limitada o inexistente capacitación": [26, 27],
-
         # Organización del tiempo de trabajo - Jornada
         "Jornadas de trabajo extensas": [14, 15],
-
         # Organización del tiempo de trabajo - Interferencia
         "Influencia del trabajo fuera del centro laboral": [16],
         "Influencia de las responsabilidades familiares": [17],
-
         # Liderazgo y relaciones - Liderazgo
         "Escasa claridad de funciones": [23, 24, 25],
         "Características del liderazgo": [28, 29],
-
         # Liderazgo y relaciones - Relaciones
         "Relaciones sociales en el trabajo": [30, 31, 32, 33],
         "Deficiente relación con los colaboradores que supervisa": [44, 45, 46],
-
         # Liderazgo y relaciones - Violencia
         "Violencia laboral": [34, 35, 36, 37, 38, 39, 40]
     }
 
-    # Datos de las categorías
+    # Datos de las categorías y dimensiones (para mostrar en la tabla)
     categorias_data = [
         # Ambiente de trabajo
         ["Ambiente de trabajo", "Condiciones en el ambiente de trabajo",
@@ -313,11 +320,11 @@ def crear_reporte_individual(row, detalles_preguntas, area_adscrita):
         if dominio and not dimension:
             pass  # Implementar lógica para dominios principales si es necesario
 
-    # Fórmula de suma
+    # Fórmula de suma total
     ws['D28'] = f"=SUM(D8:D27)"
     ws['D28'].border = border
 
-    # Recomendaciones
+    # Recomendaciones finales
     ws.merge_cells('A30:G35')
     recomendacion = generar_recomendaciones(row['Nivel de Riesgo'])
     ws['A30'] = f"RECOMENDACIONES:\n\n{recomendacion}"
@@ -333,8 +340,12 @@ def crear_reporte_individual(row, detalles_preguntas, area_adscrita):
 
 
 def main():
+    """
+    Función principal: pide al usuario seleccionar el archivo de entrada y la carpeta de salida,
+    procesa los datos y genera los reportes.
+    """
     try:
-        # Seleccionar archivo Excel
+        # Seleccionar archivo Excel de entrada
         root = tk.Tk()
         root.withdraw()
         archivo_excel = filedialog.askopenfilename(
@@ -345,7 +356,7 @@ def main():
             print("No se seleccionó ningún archivo.")
             return
 
-        # Seleccionar carpeta de destino
+        # Seleccionar carpeta de destino para los resultados
         carpeta_destino = filedialog.askdirectory(
             title="Selecciona la carpeta donde se guardarán los resultados"
         )
@@ -359,13 +370,13 @@ def main():
         df.columns = [col.split('.')[0] if '.' in str(
             col) else col for col in df.columns]
 
-        # Calcular puntuaciones
+        # Calcular puntuaciones y detalles
         resultados, detalles_preguntas = calcular_puntuaciones(df)
 
         print("\nResultados de la evaluación de riesgos psicosociales:")
         print(resultados[['Nombre', 'Puntuación Total', 'Nivel de Riesgo']])
 
-        # Guardar archivo general
+        # Guardar archivo general con todos los resultados
         archivo_general = os.path.join(
             carpeta_destino, 'resultados_evaluacion_psicosocial.xlsx')
         resultados.to_excel(archivo_general, index=False)
@@ -375,7 +386,7 @@ def main():
             carpeta_destino, "resultados_individuales")
         os.makedirs(carpeta_individuales, exist_ok=True)
 
-        # Crear reportes individuales
+        # Crear reportes individuales para cada trabajador
         for idx, row in resultados.iterrows():
             nombre = row['Nombre']
             detalles = detalles_preguntas.iloc[idx]
@@ -395,14 +406,19 @@ def main():
 
 
 class App:
+    """
+    Clase principal de la interfaz gráfica.
+    Permite seleccionar archivo, carpeta y procesar los reportes.
+    """
+
     def __init__(self, root):
         self.root = root
         self.root.title("Evaluador de Riesgos Psicosociales")
-        self.root.geometry("500x300")
+        self.root.geometry("700x500")
         self.archivo_excel = None
         self.carpeta_destino = None
 
-        # Etiquetas y botones
+        # Etiquetas y botones de la interfaz
         Label(root, text="Evaluador de Riesgos Psicosociales",
               font=("Arial", 16, "bold")).pack(pady=10)
         self.label_archivo = Label(root, text="Archivo Excel: No seleccionado")
@@ -419,7 +435,19 @@ class App:
         Button(root, text="Procesar y generar reportes",
                command=self.procesar, bg="#4F81BD", fg="white").pack(pady=20)
 
+        # Área de texto para la vista previa del archivo
+        self.text_preview = Text(root, height=10, width=80, wrap="none")
+        self.text_preview.pack(pady=10)
+        self.text_preview.config(state='disabled')
+        # Scrollbar opcional
+        scrollbar = Scrollbar(root, command=self.text_preview.yview)
+        scrollbar.pack(side=RIGHT, fill=Y)
+        self.text_preview['yscrollcommand'] = scrollbar.set
+
     def seleccionar_archivo(self):
+        """
+        Permite al usuario seleccionar el archivo Excel de entrada y muestra una vista previa.
+        """
         archivo = filedialog.askopenfilename(
             title="Selecciona el archivo Excel a evaluar",
             filetypes=[("Archivos Excel", "*.xlsx *.xls")]
@@ -428,8 +456,25 @@ class App:
             self.archivo_excel = archivo
             self.label_archivo.config(
                 text=f"Archivo Excel: {os.path.basename(archivo)}")
+            # Mostrar vista previa
+            try:
+                df = pd.read_excel(archivo)
+                preview = df.head(5).to_string(index=False)
+                self.text_preview.config(state='normal')
+                self.text_preview.delete(1.0, END)
+                self.text_preview.insert(END, preview)
+                self.text_preview.config(state='disabled')
+            except Exception as e:
+                self.text_preview.config(state='normal')
+                self.text_preview.delete(1.0, END)
+                self.text_preview.insert(
+                    END, f"Error al leer el archivo: {str(e)}")
+                self.text_preview.config(state='disabled')
 
     def seleccionar_carpeta(self):
+        """
+        Permite al usuario seleccionar la carpeta de destino.
+        """
         carpeta = filedialog.askdirectory(
             title="Selecciona la carpeta de destino")
         if carpeta:
@@ -437,6 +482,9 @@ class App:
             self.label_carpeta.config(text=f"Carpeta de destino: {carpeta}")
 
     def procesar(self):
+        """
+        Procesa el archivo seleccionado y genera los reportes.
+        """
         if not self.archivo_excel or not self.carpeta_destino:
             messagebox.showerror(
                 "Error", "Debes seleccionar el archivo y la carpeta de destino.")
@@ -471,6 +519,7 @@ class App:
 
 
 if __name__ == "__main__":
+    # Inicia la interfaz gráfica
     root = Tk()
     app = App(root)
     root.mainloop()
